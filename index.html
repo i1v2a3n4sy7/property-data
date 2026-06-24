@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>星凱堤岸 - 物業追蹤唯讀系統</title>
+    <title>星凱堤岸 - 物業追蹤系統 (支援網頁同步更新)</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 </head>
@@ -13,22 +13,46 @@
         <div class="max-w-7xl mx-auto px-4 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
             <div>
                 <h1 class="text-xl font-bold tracking-wide flex items-center gap-2">
-                    🏢 星凱堤岸 - 最新跟進狀況 (唯讀)
+                    🏢 星凱堤岸 - 物業管理系統
                 </h1>
                 <p class="text-xs text-slate-400 mt-0.5" id="updateTimeStatus">正在從伺服器載入最新數據...</p>
             </div>
-            <div id="loadingBadge" class="bg-blue-600 text-white px-3 py-1 rounded-full text-xs font-semibold animate-pulse">
-                🔄 同步中...
+            
+            <div class="flex items-center gap-3 w-full sm:w-auto justify-end">
+                <button onclick="toggleAdminPanel()" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded-lg text-sm font-medium transition cursor-pointer">
+                    🔐 管理員更新登入
+                </button>
+                <div id="loadingBadge" class="bg-blue-600 text-white px-3 py-1 rounded-full text-xs font-semibold animate-pulse">
+                    🔄 同步中...
+                </div>
             </div>
         </div>
     </header>
 
     <main class="max-w-7xl mx-auto px-4 mt-6">
+        
+        <section id="adminPanel" class="bg-blue-50 p-4 rounded-xl border border-blue-200 mb-6 hidden">
+            <h3 class="text-sm font-bold text-blue-900 mb-3">🛠️ 管理員後台：直接更新雲端 CSV 數據</h3>
+            <div class="flex flex-col sm:flex-row gap-3 items-end">
+                <div class="w-full sm:w-64">
+                    <label class="block text-xs font-bold text-blue-700 mb-1">GitHub Personal Token (金鑰密碼)</label>
+                    <input type="password" id="ghToken" placeholder="輸入你的 GitHub Token..." class="w-full px-3 py-1.5 border border-blue-300 rounded bg-white text-xs">
+                </div>
+                <div class="w-full sm:w-auto">
+                    <label class="block text-xs font-bold text-blue-700 mb-1">選擇要上傳覆蓋的新 CSV 檔案</label>
+                    <input type="file" id="csvFileInput" accept=".csv" class="text-xs text-gray-600 bg-white border border-blue-300 rounded p-1 w-full">
+                </div>
+                <button onclick="uploadCSVToGithub()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-xs font-bold cursor-pointer shrink-0 w-full sm:w-auto">
+                    🚀 上傳並同步更新全球
+                </button>
+            </div>
+            <p class="text-[11px] text-blue-600 mt-2">💡 提示：無權限的普通用戶看不到此面板，他們只能查看數據。</p>
+        </section>
+
         <section class="bg-white p-4 rounded-xl shadow-sm mb-6 flex flex-col md:flex-row gap-4 justify-between items-center">
             <div class="w-full md:w-96">
                 <label class="block text-xs font-bold text-gray-400 uppercase mb-1">自由關鍵字搜尋 (輸入座/樓/室/備忘/日期)</label>
-                <input type="text" id="searchBar" placeholder="搜尋：5座、暫時唔賣、2026-06..." 
-                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                <input type="text" id="searchBar" placeholder="搜尋：5座、暫時唔賣、2026-06..." class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
             </div>
             <div class="w-full md:w-auto flex flex-col items-start md:items-end gap-1">
                 <span class="text-xs font-bold text-gray-400 uppercase">狀態快速篩選</span>
@@ -57,121 +81,161 @@
 
         <div id="errorState" class="bg-red-50 text-red-700 rounded-xl p-8 text-center shadow-sm border border-red-200 hidden">
             <p class="font-bold text-lg">⚠️ 未能載入數據檔</p>
-            <p class="text-sm mt-1">請確保您已將名為 <code class="bg-red-100 px-1 rounded font-mono">data.csv</code> 的資料檔上傳至與此網頁相同的 GitHub 倉庫內。</p>
+            <p class="text-sm mt-1">請確保您已將名為 <code class="bg-red-100 px-1 rounded font-mono">data.csv</code> 的檔案上傳至您的 GitHub 倉庫。</p>
         </div>
 
         <div id="cardsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
     </main>
 
     <script>
+        // 配置你的 GitHub 資訊 (請修改成你自己的儲存庫資料)
+        // 例如你的網址是 https://aiden.github.io/property/，那 OWNER 就是 aiden，REPO 就是 property
+        const urlParams = window.location.pathname.split('/');
+        const OWNER = window.location.hostname.split('.')[0];
+        const REPO = urlParams[1] || ''; 
+        const FILE_PATH = 'data.csv';
+
         let rawRecords = [];
         let currentFilter = 'all';
+        let currentSha = ''; // 用於 GitHub API 更新覆蓋所需
 
-        // 核心設定：網頁會自動去抓取同一個網址目錄下的 data.csv 檔案
-        // 加上快取破壞參數 (?t=...) 確保每次開啟都是抓最新上傳的，不會被瀏覽器舊快取卡住
-        const csvUrl = `./data.csv?t=${new Date().getTime()}`;
+        const csvUrl = `./${FILE_PATH}?t=${new Date().getTime()}`;
 
         window.addEventListener('DOMContentLoaded', () => {
             fetchCSVData();
+            // 自動從瀏覽器記憶中填入 Token（省去每次輸入）
+            if(localStorage.getItem('gh_token')) {
+                document.getElementById('ghToken').value = localStorage.getItem('gh_token');
+            }
         });
 
-        // 自動異步抓取 GitHub 上的 CSV 檔案
+        // 顯示或隱藏管理員面板
+        function toggleAdminPanel() {
+            const panel = document.getElementById('adminPanel');
+            panel.classList.toggle('hidden');
+        }
+
+        // 自動從 GitHub 讀取最新 CSV 數據和檔案的 SHA 識別碼
         function fetchCSVData() {
+            // 1. 抓取 CSV 內容
             fetch(csvUrl)
-                .then(response => {
-                    if (!response.ok) throw new Error('Network response was not ok');
-                    return response.text();
-                })
+                .then(res => { if (!res.ok) throw new Error(); return res.text(); })
                 .then(csvText => {
                     Papa.parse(csvText, {
-                        header: true,
-                        skipEmptyLines: true,
+                        header: true, skipEmptyLines: true,
                         complete: function(results) {
-                            rawRecords = results.data.map(item => {
-                                return {
-                                    date: item['日期'] || item['date'] || '2026-06-23', // 根據上傳資料設定預設日期
-                                    block: (item['座'] || '').trim(),
-                                    floor: (item['樓'] || '').trim(),
-                                    room: (item['室'] || '').trim(),
-                                    sold: (item['已售'] || '').trim().toUpperCase(),
-                                    contacted: (item['成功聯絡'] || '').trim().toUpperCase(),
-                                    remark: item['Remark'] || item['remark'] || ''
-                                };
-                            }).filter(item => item.block && item.floor && item.room);
+                            rawRecords = results.data.map(item => ({
+                                date: item['日期'] || item['date'] || '2026-06-23',
+                                block: (item['座'] || '').trim(),
+                                floor: (item['樓'] || '').trim(),
+                                room: (item['室'] || '').trim(),
+                                sold: (item['已售'] || '').trim().toUpperCase(),
+                                contacted: (item['成功聯絡'] || '').trim().toUpperCase(),
+                                remark: item['Remark'] || item['remark'] || ''
+                            })).filter(item => item.block && item.floor && item.room);
 
-                            // 隱藏加載動畫，初始化畫面
                             document.getElementById('loadingBadge').classList.add('hidden');
                             document.getElementById('updateTimeStatus').innerText = `數據同步成功！已載入最新即時狀況`;
-                            
                             initSystemView();
                         }
                     });
-                })
-                .catch(error => {
-                    console.error('Error fetching CSV:', error);
+                }).catch(() => {
                     document.getElementById('loadingBadge').classList.add('hidden');
                     document.getElementById('errorState').classList.remove('hidden');
-                    document.getElementById('updateTimeStatus').innerText = `數據同步失敗，請聯絡管理員更新 data.csv`;
                 });
+
+            // 2. 順便去背後拿取檔案的 SHA (如果管理員要更新時會用到)
+            if (OWNER && REPO) {
+                fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/${FILE_PATH}`)
+                    .then(res => res.json())
+                    .then(data => { currentSha = data.sha; })
+                    .catch(err => console.log("無法獲取 SHA，可能尚未建立 data.csv"));
+            }
         }
 
+        // 利用 GitHub API 直接將網頁上的 CSV 檔案上傳並覆蓋雲端倉庫
+        function uploadCSVToGithub() {
+            const token = document.getElementById('ghToken').value.trim();
+            const fileInput = document.getElementById('csvFileInput');
+            
+            if (!token) { alert('請先輸入 GitHub Token 密碼！'); return; }
+            if (fileInput.files.length === 0) { alert('請選擇一個 CSV 檔案！'); return; }
+
+            localStorage.setItem('gh_token', token); // 記住 Token 方便下次使用
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                const text = e.target.result;
+                // 將文字編碼為 Base64 (GitHub API 要求)
+                const base64Content = btoa(unescape(encodeURIComponent(text)));
+
+                document.getElementById('loadingBadge').classList.remove('hidden');
+                document.getElementById('updateTimeStatus').innerText = '正在上傳到 GitHub 伺服器...';
+
+                // 打開 GitHub API 發送覆蓋請求
+                fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/${FILE_PATH}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `token ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        message: `管理員透過網頁更新數據庫: ${new Date().toLocaleString()}`,
+                        content: base64Content,
+                        sha: currentSha // 告訴 GitHub 我要覆蓋這個舊檔
+                    })
+                })
+                .then(res => {
+                    if(res.ok) {
+                        alert('🎉 數據上傳成功！GitHub 正在發佈中，大約 1 分鐘後所有人重新整理即可看到最新資料！');
+                        location.reload();
+                    } else {
+                        alert('❌ 上傳失敗！請檢查你的 Token 密碼是否正確，或是否具有寫入權限。');
+                        document.getElementById('loadingBadge').classList.add('hidden');
+                    }
+                })
+                .catch(err => {
+                    alert('發生網絡錯誤！');
+                    document.getElementById('loadingBadge').classList.add('hidden');
+                });
+            };
+            reader.readAsText(file);
+        }
+
+        // 以下為純展示/搜尋歸納邏輯 (與上個版本相同)
         function initSystemView() {
             document.getElementById('statsSummary').classList.remove('hidden');
-            updateStats();
-            renderCards();
+            updateStats(); renderCards();
         }
 
-        // 依據物業單位歸納合併歷史
         function groupRecordsByProperty() {
             const groups = {};
             rawRecords.forEach(rec => {
                 const key = `${rec.block}-${rec.floor}-${rec.room}`;
-                if (!groups[key]) {
-                    groups[key] = {
-                        block: rec.block,
-                        floor: rec.floor,
-                        room: rec.room,
-                        history: []
-                    };
-                }
+                if (!groups[key]) { groups[key] = { block: rec.block, floor: rec.floor, room: rec.room, history: [] }; }
                 groups[key].history.push(rec);
             });
-
             Object.keys(groups).forEach(key => {
                 groups[key].history.sort((a, b) => new Date(b.date) - new Date(a.date));
                 groups[key].latestStatus = groups[key].history[0];
             });
-
             return Object.values(groups);
         }
 
-        // 渲染卡片 (移除所有輸入/Checkbox控制，改為純展示)
         function renderCards() {
             const container = document.getElementById('cardsContainer');
             const searchTerm = document.getElementById('searchBar').value.toLowerCase();
             container.innerHTML = '';
-
             const properties = groupRecordsByProperty();
 
             let filteredProperties = properties.filter(prop => {
                 const latest = prop.latestStatus;
-                
                 if (currentFilter === 'uncontacted' && latest.contacted !== 'N') return false;
                 if (currentFilter === 'contacted' && latest.contacted !== 'Y') return false;
-
                 if (searchTerm) {
-                    const matchBasic = 
-                        prop.block.toLowerCase().includes(searchTerm) ||
-                        prop.floor.toLowerCase().includes(searchTerm) ||
-                        prop.room.toLowerCase().includes(searchTerm);
-                    
-                    const matchHistory = prop.history.some(h => 
-                        h.remark.toLowerCase().includes(searchTerm) || 
-                        h.date.toLowerCase().includes(searchTerm) ||
-                        h.contacted.toLowerCase() === searchTerm ||
-                        h.sold.toLowerCase() === searchTerm
-                    );
-
+                    const matchBasic = prop.block.toLowerCase().includes(searchTerm) || prop.floor.toLowerCase().includes(searchTerm) || prop.room.toLowerCase().includes(searchTerm);
+                    const matchHistory = prop.history.some(h => h.remark.toLowerCase().includes(searchTerm) || h.date.toLowerCase().includes(searchTerm) || h.contacted.toLowerCase() === searchTerm);
                     return matchBasic || matchHistory;
                 }
                 return true;
@@ -185,7 +249,6 @@
             filteredProperties.forEach(prop => {
                 const latest = prop.latestStatus;
                 const card = document.createElement('div');
-                
                 const borderClass = latest.contacted === 'Y' ? 'border-l-4 border-l-emerald-500' : 'border-l-4 border-l-amber-500';
                 card.className = `bg-white p-5 rounded-xl shadow-xs border border-gray-100 flex flex-col justify-between ${borderClass}`;
 
@@ -196,36 +259,22 @@
                             <div class="flex justify-between items-center mb-1">
                                 <span class="font-bold text-gray-500">${h.date}</span>
                                 <div class="flex gap-1">
-                                    <span class="px-1.5 py-0.5 rounded text-[10px] ${h.contacted === 'Y' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}">
-                                        聯絡:${h.contacted}
-                                    </span>
+                                    <span class="px-1.5 py-0.5 rounded text-[10px] ${h.contacted === 'Y' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}">聯絡:${h.contacted}</span>
                                     ${h.sold === 'Y' ? '<span class="px-1.5 py-0.5 rounded text-[10px] bg-rose-100 text-rose-800">已售</span>' : ''}
                                 </div>
                             </div>
                             <p class="text-gray-700 italic">${h.remark || '（無備忘）'}</p>
-                        </div>
-                    `;
+                        </div>`;
                 });
 
                 card.innerHTML = `
                     <div>
                         <div class="flex justify-between items-center pb-2 border-b border-gray-100 mb-3">
-                            <span class="text-base font-bold text-slate-800">
-                                ${prop.block}座 ${prop.floor}樓 ${prop.room}室
-                            </span>
-                            <span class="text-xs font-semibold px-2 py-0.5 rounded ${latest.contacted === 'Y' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}">
-                                狀態: ${latest.contacted === 'Y' ? '成功聯絡' : '未成功'}
-                            </span>
+                            <span class="text-base font-bold text-slate-800">${prop.block}座 ${prop.floor}樓 ${prop.room}室</span>
+                            <span class="text-xs font-semibold px-2 py-0.5 rounded ${latest.contacted === 'Y' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}">狀態: ${latest.contacted === 'Y' ? '成功聯絡' : '未成功'}</span>
                         </div>
-
-                        <div class="mt-2">
-                            <label class="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">📜 歷史紀錄與備忘</label>
-                            <div class="space-y-2 max-h-64 overflow-y-auto pr-1">
-                                ${historyHtml}
-                            </div>
-                        </div>
-                    </div>
-                `;
+                        <div class="mt-2"><label class="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">📜 歷史紀錄與備忘</label><div class="space-y-2 max-h-64 overflow-y-auto pr-1">${historyHtml}</div></div>
+                    </div>`;
                 container.appendChild(card);
             });
         }
@@ -239,15 +288,10 @@
 
         function filterData(type) {
             currentFilter = type;
-            document.querySelectorAll('.filter-btn').forEach(btn => {
-                btn.classList.remove('bg-slate-800', 'text-white');
-                btn.classList.add('bg-gray-100', 'text-gray-600', 'hover:bg-gray-200');
-            });
-            event.target.classList.remove('bg-gray-100', 'text-gray-600', 'hover:bg-gray-200');
-            event.target.classList.add('bg-slate-800', 'text-white');
+            document.querySelectorAll('.filter-btn').forEach(btn => { btn.classList.remove('bg-slate-800', 'text-white'); btn.classList.add('bg-gray-100', 'text-gray-600', 'hover:bg-gray-200'); });
+            event.target.classList.remove('bg-gray-100', 'text-gray-600', 'hover:bg-gray-200'); event.target.classList.add('bg-slate-800', 'text-white');
             renderCards();
         }
-
         document.getElementById('searchBar').addEventListener('input', renderCards);
     </script>
 </body>
