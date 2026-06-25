@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Property Follow-up System / 物業跟進系統</title>
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #18bc9c;
+            --bg-color: #f8f9fa;
+            --text-color: #333;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid var(--primary-color);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+
+        button.lang-btn {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            cursor: pointer;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+
+        .form-section, .list-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        h2 {
+            color: var(--primary-color);
+            margin-top: 0;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group.checkbox-group {
+            flex-direction: row;
+            align-items: center;
+            gap: 10px;
+            margin-top: 25px;
+        }
+
+        label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+        }
+
+        input[type="text"], input[type="date"], textarea {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .btn-submit {
+            background-color: var(--secondary-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 4px;
+            width: 100%;
+            font-weight: bold;
+        }
+
+        .controls-grid {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        .search-box {
+            flex-grow: 1;
+            min-width: 250px;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+
+        .table-container {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+
+        th {
+            background-color: var(--primary-color);
+            color: white;
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+        }
+
+        th:hover {
+            background-color: #34495e;
+        }
+
+        th::after {
+            content: ' ↕';
+            font-size: 0.8em;
+            color: #bbb;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+
+        .tick {
+            color: #27ae60;
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+        
+        .cross {
+            color: #c0392b;
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1 id="title">物業跟進系統 / Property Follow-up System</h1>
+        <button class="lang-btn" onclick="toggleLanguage()">English</button>
+    </header>
+
+    <div class="form-section">
+        <h2 id="form-heading">新增跟进紀錄 / Add New Record</h2>
+        <form id="followupForm" onsubmit="saveRecord(event)">
+            <div class="form-grid">
+                <div class="form-group">
+                    <label id="lbl-estate">屋苑名稱 / Estate Name</label>
+                    <input type="text" id="estate" required>
+                </div>
+                <div class="form-group">
+                    <label id="lbl-date">跟進日期 / Follow-up Date</label>
+                    <input type="date" id="date" required>
+                </div>
+                <div class="form-group">
+                    <label id="lbl-block">座數 / Block</label>
+                    <input type="text" id="block" required>
+                </div>
+                <div class="form-group">
+                    <label id="lbl-floor">樓層 / Floor</label>
+                    <input type="text" id="floor" required>
+                </div>
+                <div class="form-group">
+                    <label id="lbl-room">室 / Room</label>
+                    <input type="text" id="room" required>
+                </div>
+                <div class="form-group checkbox-group">
+                    <input type="checkbox" id="connected">
+                    <label id="lbl-connected" for="connected">成功聯絡 / Connected</label>
+                </div>
+                <div class="form-group checkbox-group">
+                    <input type="checkbox" id="noAnswer">
+                    <label id="lbl-noAnswer" for="noAnswer">未能接聽 / No Answer</label>
+                </div>
+            </div>
+            <div class="form-group" style="margin-bottom: 15px;">
+                <label id="lbl-remark">備註 / Remark</label>
+                <textarea id="remark" rows="3"></textarea>
+            </div>
+            <button type="submit" class="btn-submit" id="btn-submit">儲存紀錄 / Save Record</button>
+        </form>
+    </div>
+
+    <div class="list-section">
+        <h2 id="list-heading">歷史紀錄 / Past Records</h2>
+        
+        <div class="controls-grid">
+            <div class="search-box">
+                <input type="text" id="searchBar" onkeyup="filterAndRenderTable()" placeholder="搜尋關鍵字... / Search keywords...">
+            </div>
+        </div>
+
+        <div class="table-container">
+            <table id="recordsTable">
+                <thead>
+                    <tr>
+                        <th onclick="sortTable('estate')" id="th-estate">屋苑名稱</th>
+                        <th onclick="sortTable('date')" id="th-date">跟進日期</th>
+                        <th onclick="sortTable('block')" id="th-block">座數</th>
+                        <th onclick="sortTable('floor')" id="th-floor">樓層</th>
+                        <th onclick="sortTable('room')" id="th-room">室</th>
+                        <th onclick="sortTable('connected')" id="th-connected">成功聯絡</th>
+                        <th onclick="sortTable('noAnswer')" id="th-noAnswer">未能接聽</th>
+                        <th onclick="sortTable('remark')" id="th-remark">備註</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                    </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    // System State
+    let currentLang = 'zh';
+    let records = JSON.parse(localStorage.getItem('propertyRecords')) || [];
+    let sortDirection = {};
+
+    // UI Translations
+    const i18n = {
+        zh: {
+            title: "物業跟進系統",
+            formHeading: "新增跟進紀錄",
+            listHeading: "歷史紀錄",
+            estate: "屋苑名稱",
+            date: "跟進日期",
+            block: "座數",
+            floor: "樓層",
+            room: "室",
+            connected: "成功聯絡",
+            noAnswer: "未能接聽",
+            remark: "備註",
+            submit: "儲存紀錄",
+            searchPlaceholder: "輸入任何字眼進行搜尋...",
+            langBtn: "English"
+        },
+        en: {
+            title: "Property Follow-up System",
+            formHeading: "Add New Record",
+            listHeading: "Past Records",
+            estate: "Estate Name",
+            date: "Follow-up Date",
+            block: "Block",
+            floor: "Floor",
+            room: "Room",
+            connected: "Connected",
+            noAnswer: "No Answer",
+            remark: "Remark",
+            submit: "Save Record",
+            searchPlaceholder: "Type text to search...",
+            langBtn: "繁體中文"
+        }
+    };
+
+    // Initialize Page
+    document.addEventListener("DOMContentLoaded", () => {
+        // Set today's date as default in the form
+        document.getElementById('date').value = new Date().toISOString().split('T')[0];
+        updateLanguageDOM();
+        renderTable(records);
+    });
+
+    // Language Toggle Feature
+    function toggleLanguage() {
+        currentLang = currentLang === 'zh' ? 'en' : 'zh';
+        updateLanguageDOM();
+    }
+
+    function updateLanguageDOM() {
+        const t = i18n[currentLang];
+        document.getElementById('title').innerText = t.title;
+        document.getElementById('form-heading').innerText = t.formHeading;
+        document.getElementById('list-heading').innerText = t.listHeading;
+        
+        document.getElementById('lbl-estate').innerText = t.estate;
+        document.getElementById('lbl-date').innerText = t.date;
+        document.getElementById('lbl-block').innerText = t.block;
+        document.getElementById('lbl-floor').innerText = t.floor;
+        document.getElementById('lbl-room').innerText = t.room;
+        document.getElementById('lbl-connected').innerText = t.connected;
+        document.getElementById('lbl-noAnswer').innerText = t.noAnswer;
+        document.getElementById('lbl-remark').innerText = t.remark;
+        document.getElementById('btn-submit').innerText = t.submit;
+        
+        document.getElementById('searchBar').placeholder = t.searchPlaceholder;
+        document.querySelector('.lang-btn').innerText = t.langBtn;
+
+        // Table Headers
+        document.getElementById('th-estate').innerText = t.estate;
+        document.getElementById('th-date').innerText = t.date;
+        document.getElementById('th-block').innerText = t.block;
+        document.getElementById('th-floor').innerText = t.floor;
+        document.getElementById('th-room').innerText = t.room;
+        document.getElementById('th-connected').innerText = t.connected;
+        document.getElementById('th-noAnswer').innerText = t.noAnswer;
+        document.getElementById('th-remark').innerText = t.remark;
+    }
+
+    // Save Data Logic
+    function saveRecord(event) {
+        event.preventDefault();
+
+        const record = {
+            id: Date.now(), // Unique ID for reference
+            estate: document.getElementById('estate').value.trim(),
+            date: document.getElementById('date').value,
+            block: document.getElementById('block').value.trim(),
+            floor: document.getElementById('floor').value.trim(),
+            room: document.getElementById('room').value.trim(),
+            connected: document.getElementById('connected').checked,
+            noAnswer: document.getElementById('noAnswer').checked,
+            remark: document.getElementById('remark').value.trim()
+        };
+
+        records.push(record);
+        localStorage.setItem('propertyRecords', JSON.stringify(records));
+        
+        // Reset form inputs except date
+        document.getElementById('estate').value = '';
+        document.getElementById('block').value = '';
+        document.getElementById('floor').value = '';
+        document.getElementById('room').value = '';
+        document.getElementById('connected').checked = false;
+        document.getElementById('noAnswer').checked = false;
+        document.getElementById('remark').value = '';
+        
+        filterAndRenderTable();
+    }
+
+    // Dynamic Render Table Data
+    function renderTable(dataToRender) {
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = '';
+
+        dataToRender.forEach(record => {
+            const row = document.createElement('tr');
+            
+            row.innerHTML = `
+                <td>${escapeHTML(record.estate)}</td>
+                <td>${record.date}</td>
+                <td>${escapeHTML(record.block)}</td>
+                <td>${escapeHTML(record.floor)}</td>
+                <td>${escapeHTML(record.room)}</td>
+                <td style="text-align: center;">${record.connected ? '<span class="tick">✔</span>' : '<span class="cross">✘</span>'}</td>
+                <td style="text-align: center;">${record.noAnswer ? '<span class="tick">✔</span>' : '<span class="cross">✘</span>'}</td>
+                <td>${escapeHTML(record.remark)}</td>
+            `;
+            tbody.appendChild(row);
+        });
+    }
+
+    // Search / Filter Function
+    function filterAndRenderTable() {
+        const searchText = document.getElementById('searchBar').value.toLowerCase();
+        
+        const filteredRecords = records.filter(record => {
+            return (
+                record.estate.toLowerCase().includes(searchText) ||
+                record.date.includes(searchText) ||
+                record.block.toLowerCase().includes(searchText) ||
+                record.floor.toLowerCase().includes(searchText) ||
+                record.room.toLowerCase().includes(searchText) ||
+                record.remark.toLowerCase().includes(searchText)
+            );
+        });
+
+        renderTable(filteredRecords);
+    }
+
+    // Multi-Field Sorting Engine
+    function sortTable(field) {
+        // Toggle sort order
+        sortDirection[field] = !sortDirection[field];
+        const isAscending = sortDirection[field];
+
+        records.sort((a, b) => {
+            let valA = a[field];
+            let valB = b[field];
+
+            // For checkboxes/booleans, convert to numbers for sorting comparison
+            if (typeof valA === 'boolean') {
+                valA = valA ? 1 : 0;
+                valB = valB ? 1 : 0;
+            } else if (typeof valA === 'string') {
+                // Natural sort logic for numbers disguised as strings (like floors/rooms)
+                return isAscending 
+                    ? valA.localeCompare(valB, undefined, {numeric: true, sensitivity: 'base'})
+                    : valB.localeCompare(valA, undefined, {numeric: true, sensitivity: 'base'});
+            }
+
+            if (valA < valB) return isAscending ? -1 : 1;
+            if (valA > valB) return isAscending ? 1 : -1;
+            return 0;
+        });
+
+        filterAndRenderTable();
+    }
+
+    // Security helper to prevent XSS issues when reading inputs
+    function escapeHTML(str) {
+        return str.replace(/[&<>'"]/g, 
+            tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+        );
+    }
+</script>
+</body>
+</html>
